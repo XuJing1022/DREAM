@@ -28,7 +28,7 @@ class DreamModel(torch.nn.Module):
         # Layer definitons
         self.encode = torch.nn.Embedding(config.num_product, 
                                          config.embedding_dim,
-                                         padding_idx = 0) # Item embedding layer, 商品编码
+                                         padding_idx = 0) # 输出遇到此下标时用零填充。 Item embedding layer, 商品编码，实现word embedding
         self.pool = {'avg':pool_avg, 'max':pool_max}[config.basket_pool_type] # Pooling of basket
         # RNN type specify
         if config.rnn_type in ['LSTM', 'GRU']:
@@ -46,18 +46,18 @@ class DreamModel(torch.nn.Module):
                                     batch_first=True, 
                                     dropout=config.dropout)
     
-    def forward(self, x, lengths, hidden):
+    def forward(self, x, lengths, hidden):  # 给定输入，计算这个网络模块的输出
         # Basket Encoding 
         ub_seqs = [] # users' basket sequence
         for user in x: # x shape (batch of user, time_step, indice of product) nested lists
             embed_baskets = []
-            for basket in user:
+            for basket in user:  # 一条order
                 basket = torch.LongTensor(basket).resize_(1, len(basket))
                 basket = basket.cuda() if self.config.cuda else basket # use cuda for acceleration
-                basket = self.encode(torch.autograd.Variable(basket)) # shape: 1, len(basket), embedding_dim
+                basket = self.encode(torch.autograd.Variable(basket)) # shape: 1, len(basket)[item数], embedding_dim
                 embed_baskets.append(self.pool(basket, dim = 1))
             # concat current user's all baskets and append it to users' basket sequence
-            ub_seqs.append(torch.cat(embed_baskets, 1)) # shape: 1, num_basket, embedding_dim
+            ub_seqs.append(torch.cat(embed_baskets, 0).unsqueeze(0)) # shape: 1, num_basket, embedding_dim
         
         # Input for rnn 
         ub_seqs = torch.cat(ub_seqs, 0).cuda() if self.config.cuda else torch.cat(ub_seqs, 0) # shape: batch_size, max_len, embedding_dim
